@@ -176,7 +176,7 @@ module emu
 assign USER_OUT = '1;
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
-assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
+
 assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = 0;
  
 assign LED_USER  = led;
@@ -228,14 +228,23 @@ parameter CONF_STR = {
 /////////////////  CLOCKS  ////////////////////////
 
 wire clk_sys;
+wire pll_locked;
 
 pll pll
 (
 	.refclk(CLK_50M),
 	.rst(0),
-	.outclk_0(CLK_VIDEO),
-	.outclk_1(clk_sys)
+	.outclk_0(CLK_VIDEO),	// 57.27272
+	.outclk_1(clk_sys),		// 14.31818
+	.locked(pll_locked)
 );
+
+reg cep;
+always @(posedge CLK_VIDEO) begin
+	reg [2:0] div;
+	div <= div + 1'd1;
+	cep   <= (div == 0);
+end
 
 /////////////////  HPS  ///////////////////////////
 
@@ -388,12 +397,18 @@ video_mixer #(.LINE_LENGTH(580), .GAMMA(1)) video_mixer
 	.freeze_sync()
 );
 
-wire [17:0] ram_addr;
+//========================== RAM ===========================================
+
+
+
+
+wire [17:0] ram_addr;  // sd = 24:0
 reg  [15:0] ram_dout;
 wire  [7:0]	ram_din;
 wire        ram_we;
 wire        ram_aux;
 
+/*
 reg [7:0] ram0[196608];
 always @(posedge clk_sys) begin
 	if(ram_we & ~ram_aux) begin
@@ -413,6 +428,40 @@ always @(posedge clk_sys) begin
 		ram_dout[15:8] <= ram1[ram_addr[15:0]];
 	end
 end
+*/
+
+
+//assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
+assign SDRAM_CKE = 1;
+
+sdram sdram
+(
+	// system interface
+	.init    ( !pll_locked ),
+	.clk     ( CLK_VIDEO   ),
+	.sync    ( cep         ),
+
+	.sd_clk  ( SDRAM_CLK   ),
+	.sd_data ( SDRAM_DQ    ),
+	.sd_addr ( SDRAM_A     ),
+	.sd_dqm  ( {SDRAM_DQMH, SDRAM_DQML} ),
+	.sd_cs   ( SDRAM_nCS   ),
+	.sd_ba   ( SDRAM_BA    ),
+	.sd_we   ( SDRAM_nWE   ),
+	.sd_ras  ( SDRAM_nRAS  ),
+	.sd_cas  ( SDRAM_nCAS  ),
+
+	// cpu/chipset interface
+	// map rom to sdram word address $200000 - $20ffff
+	.din     ( {ram_din,ram_din}),
+	.addr    ( {7'd0000000,ram_addr}  ),
+	.ds      ( {ram_aux,~ram_aux} ),
+	.we      ( ram_we    ),
+	.oe      ( ~ram_we    ),
+	.dout    ( ram_dout   )
+);
+
+//==========================================================================
 
 wire dd_reset = RESET | status[0] | buttons[1];
 
