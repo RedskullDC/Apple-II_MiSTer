@@ -22,6 +22,7 @@ Port for the MiST: http://ws0.org/tag/apple2/
 * Saturn 128k RAM expansion in slot 5 (get the utility disks from here: http://apple2online.com/index.php?p=1_28)
 * Ramworks card with 16MB (256 banks of 64KB : see the resources folder for manual/util disk)
 * Mockingboard model A (two AY-3-8913 chips for six audio channels) in slot 4
+* Hooked Left and Right ALT to the Open/Closed Apple Keys respectively.
 
 ## Disk format notes
 

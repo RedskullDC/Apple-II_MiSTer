@@ -18,11 +18,13 @@ entity keyboard is
 
   port (
     CLK_14M  : in std_logic;
-    PS2_Key  : in std_logic_vector(10 downto 0);  -- From PS/2 port
-    reads    : in std_logic;            -- Read strobe
+    PS2_Key  : in std_logic_vector(10 downto 0);  	-- From PS/2 port
+    reads    : in std_logic;            				-- Read strobe
     reset    : in std_logic;
-    akd      : buffer std_logic;        -- Any key down
-    K        : out unsigned(7 downto 0) -- Latched, decoded keyboard data
+    akd      : buffer std_logic;        				-- Any key down
+    K        : out unsigned(7 downto 0); 				-- Latched, decoded keyboard data
+	 op_apple : out std_logic;								-- Open Apple (PB0) output
+	 cl_apple : out std_logic								-- Closed Apple (PB1) output
     );
 end keyboard;
 
@@ -37,7 +39,7 @@ architecture rtl of keyboard is
   signal key_pressed        : std_logic;  -- Key pressed & not read
   signal ctrl,shift,caplock : std_logic;
   signal old_stb            : std_logic;
-
+  
   signal rep_timer          : unsigned(22 downto 0);
 
   -- Special PS/2 keyboard codes
@@ -45,6 +47,7 @@ architecture rtl of keyboard is
   constant RIGHT_SHIFT      : unsigned(7 downto 0) := X"59";
   constant LEFT_CTRL        : unsigned(7 downto 0) := X"14";
   constant CAPS_LOCK        : unsigned(7 downto 0) := X"58";
+  constant APPLE_KEYS       : unsigned(7 downto 0) := X"11";	-- Left ALT = 11, Right ALT = E0 11
 
   type states is (IDLE,
                   HAVE_CODE,
@@ -94,12 +97,24 @@ begin
           shift <= '1';
         elsif code = LEFT_CTRL then
           ctrl <= '1';
+        elsif code = APPLE_KEYS then
+			 if ext = '1' then
+					cl_apple <= '1';
+			 else
+					op_apple <= '1';
+			 end if;
         end if;
       elsif state = KEY_UP then
         if code = LEFT_SHIFT or code = RIGHT_SHIFT then
           shift <= '0';
         elsif code = LEFT_CTRL then
           ctrl <= '0';
+		  elsif code = APPLE_KEYS then
+			 if ext = '1' then
+					cl_apple <= '0';
+			 else
+					op_apple <= '0';
+			 end if;
         end if;
       end if;
     end if;

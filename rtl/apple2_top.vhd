@@ -116,6 +116,7 @@ architecture arch of apple2_top is
   signal joyx       : std_logic;
   signal joyy       : std_logic;
   signal pdl_strobe : std_logic;
+  signal op_apple,cl_apple  : std_logic;
 
 begin
 
@@ -143,7 +144,7 @@ begin
   -- GAMEPORT input bits:
   --  7    6    5    4    3   2   1    0
   -- pdl3 pdl2 pdl1 pdl0 pb3 pb2 pb1 casette
-  GAMEPORT <=  "00" & joyy & joyx & "0" & joy(5) & joy(4) & TAPE_IN;
+  GAMEPORT <=  "00" & joyy & joyx & "0" & (joy(5) or cl_apple) & (joy(4) or op_apple) & TAPE_IN;		-- add in pushbuttons from Keyboard
   
   process(CLK_14M, pdl_strobe)
     variable cx, cy : integer range -100 to 5800 := 0;
@@ -248,7 +249,9 @@ begin
     reset    => reset,
     reads    => read_key,
     K        => K,
-    akd      => akd
+    akd      => akd,
+	 op_apple => op_apple,								-- Open Apple (PB0) output
+	 cl_apple => cl_apple								-- Closed Apple (PB1) output
     );
 
   disk : entity work.disk_ii port map (
