@@ -18,8 +18,9 @@ Port for the MiST: http://ws0.org/tag/apple2/
 * scanlines
 * color, amber, green and black&white monitor
 * language card in slot 0
-* 64K base + 64K auxilary RAM with 80 column and double hi-res support (256KB total with Saturn 128K)
+* 64K base + 16MB auxilary RAM with 80 column and double hi-res support
 * Saturn 128k RAM expansion in slot 5 (get the utility disks from here: http://apple2online.com/index.php?p=1_28)
+* Ramworks card with 16MB (256 banks of 64KB : see the resources folder for manual/util disk)
 * Mockingboard model A (two AY-3-8913 chips for six audio channels) in slot 4
 
 ## Disk format notes

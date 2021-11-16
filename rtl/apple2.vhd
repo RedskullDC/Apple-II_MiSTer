@@ -22,7 +22,7 @@ entity apple2 is
     reset          : in  std_logic;
     cpu            : in  std_logic;              -- 0 - 6502, 1 - 65C02
     ADDR           : out unsigned(15 downto 0);  -- CPU address
-    ram_addr       : out unsigned(17 downto 0);  -- RAM address
+    ram_addr       : out unsigned(23 downto 0);  -- RAM address
     D              : out unsigned(7 downto 0);   -- Data to RAM
     ram_do         : in unsigned(15 downto 0);   -- Data from RAM (lo byte: MAIN RAM, hi byte: AUX RAM)
     aux            : buffer std_logic;           -- Write to MAIN or AUX RAM
@@ -31,6 +31,7 @@ entity apple2 is
     IRQ_n          : in std_logic;
     NMI_n          : in std_logic;
     ram_we         : out std_logic;              -- RAM write enable
+	 RAS            : out std_logic;
     VIDEO          : out std_logic;
     COLOR_LINE     : out std_logic;
     HBL            : out std_logic;
@@ -57,7 +58,7 @@ architecture rtl of apple2 is
     port ( clk: in std_logic;
            reset_in: in std_logic;
            addr: in unsigned(15 downto 0);
-           ram_addr: out unsigned(17 downto 0);          
+           ram_addr: out unsigned(23 downto 0);          
            card_ram_we: out std_logic;
            card_ram_rd: out std_logic
     );
@@ -123,7 +124,6 @@ architecture rtl of apple2 is
   signal GAMEPORT_SELECT : std_logic;
   signal IO_STROBE : std_logic;
   signal HRAM_CONTROL : std_logic;
-  signal C01X_SELECT : std_logic;
 
   -- Speaker signal
   signal speaker_sig : std_logic := '0';        
@@ -137,7 +137,7 @@ architecture rtl of apple2 is
   signal HRAM_PRE_WR : std_logic;
   signal HRAM_WR_N : std_logic;
   signal HRAM_BANK1 : std_logic;
-  signal CPU_RAM_ADDR : unsigned(17 downto 0);
+  signal CPU_RAM_ADDR : unsigned(23 downto 0);
 
   signal HRAM_READ_EN : std_logic;
   signal HRAM_WRITE_EN : std_logic;
@@ -148,22 +148,27 @@ architecture rtl of apple2 is
   signal R_W_n     : std_logic;
 
   -- ramcard
-  signal card_addr : unsigned(17 downto 0);
+  signal card_addr : unsigned(23 downto 0);
   signal card_ram_rd : std_logic;
   signal card_ram_we : std_logic;
   signal ram_card_read : std_logic;
   signal ram_card_write : std_logic;
   signal ram_card_sel : std_logic;
 
+  -- Ramworks bank registers
+  signal C073 			: unsigned(7 downto 0) := x"00";		-- ZERO on power-up, but unaffected by RESET!!!!
+  signal mem_prefix 	: unsigned(7 downto 0);
+  
 begin
 
+  RAS <= not RAS_N;
   CLK_2M <= Q3;
 
-  ram_addr <= CPU_RAM_ADDR when PHASE_ZERO = '1' else "00" & VIDEO_ADDRESS;
+  ram_addr <= CPU_RAM_ADDR when PHASE_ZERO = '1' else x"00" & VIDEO_ADDRESS;
   ram_we <= ((we and RAM_SELECT) or (we and (HRAM_WRITE_EN or ram_card_write))) when PHASE_ZERO = '1' else '0';
   CPU_WE <= we;
 
-  -- ramcard  
+  -- =================  ramcard ===========================================
   ram_card_D: component ramcard
     port map
     (
@@ -178,6 +183,8 @@ begin
     ram_card_read  <= ROM_SELECT and card_ram_rd;
     ram_card_write <= ROM_SELECT and card_ram_we;
 	 ram_card_sel   <= ram_card_write  when we = '1' else ram_card_read;
+  
+  --=======================================================================
   
   RAM_data_latch : process (CLK_14M)
   begin
@@ -211,7 +218,7 @@ begin
     ROM_SELECT <= '0';
     RAM_SELECT <= '0';
     KEYBOARD_SELECT <= '0';
-    C01X_SELECT <= '0';
+    READ_KEY <= '0';
     TAPE_OUT <= '0';
     SPEAKER_SELECT <= '0';
     SOFTSWITCH_SELECT <= '0';
@@ -222,40 +229,39 @@ begin
     ioselect <= (others => '0');
     devselect <= (others => '0');
     IO_STROBE <= '0';
-    case A(15 downto 14) is
-      when "00" | "01" | "10" =>         -- 0000 - BFFF
+    
+	 case A(15 downto 14) is
+      when "00" | "01" | "10" =>         		-- 0000 - BFFF
         RAM_SELECT <= '1';
       when "11" => -- C000 - FFFF
         case A(13 downto 12) is
-          when "00" =>                  -- C000 - CFFF
+          when "00" =>                  		-- C000 - CFFF
             case A(11 downto 8) is
-              when x"0" =>              -- C000 - C0FF
+              when x"0" =>              		-- C000 - C0FF
                 case A(7 downto 4) is
-                  when x"0" =>          -- C000 - C00F
+                  when x"0" =>          		-- C000 - C00F
                      KEYBOARD_SELECT <= '1';
-                  when x"1" =>          -- C010 - C01F
-                    C01X_SELECT <= '1';
-                  when x"2" =>          -- C020 - C02F
+                  when x"1" =>          		-- C010 - C01F
+                     READ_KEY <= '1';
+                  when x"2" =>          		-- C020 - C02F
                     TAPE_OUT <= '1';
-                  when x"3" =>          -- C030 - C03F
+                  when x"3" =>          		-- C030 - C03F
                     SPEAKER_SELECT <= '1';
-                  when x"4" =>          -- C040 - C04F
+                  when x"4" =>          		-- C040 - C04F
                     STB <= '1';
-                  when x"5" =>          -- C050 - C05F
+                  when x"5" =>          		-- C050 - C05F
                     SOFTSWITCH_SELECT <= '1';
-                  when x"6" =>          -- C060 - C06F
+                  when x"6" =>          		-- C060 - C06F
                     GAMEPORT_SELECT <= '1';
-                  when x"7" =>          -- C070 - C07F
+                  when x"7" =>          		-- C070 - C07F
                     PDL_STROBE <= '1';
                   when x"8" =>          -- C080 - C08F
                     HRAM_CONTROL <= '1';
-                  when x"9" | x"A" | x"B" | -- C090 - C0FF
-                       x"C" | x"D" | x"E" | x"F" =>
+                  when x"9" | x"A" | x"B" | x"C" | x"D" | x"E" | x"F" =>	-- C090 - C0FF
                     devselect(TO_INTEGER(A(6 downto 4))) <= '1';
                   when others => null;                
                 end case;
-              when x"1" | x"2" |   -- C100 - C2FF, C400-C7FF
-                   x"4" | x"5" | x"6" | x"7" =>
+              when x"1" | x"2" |  x"4" | x"5" | x"6" | x"7" =>	-- C100 - C2FF, C400-C7FF
                 if CXROM = '1' then
                   ROM_SELECT <= '1';
                 else
@@ -267,8 +273,7 @@ begin
                 else
                   ioselect(TO_INTEGER(A(10 downto 8))) <= '1';
                 end if;
-              when x"8" | x"9" | x"A" |  -- C800 - CFFF
-                   x"B" | x"C" | x"D" | x"E" | x"F" =>
+              when x"8" | x"9" | x"A" | x"B" | x"C" | x"D" | x"E" | x"F" =>	-- C800 - CFFF
                 if CXROM = '1' or C8ROM = '1' then
                   ROM_SELECT <= '1';
                 else
@@ -276,7 +281,8 @@ begin
                 end if;
               when others => null;
             end case;
-          when "01" | "10" | "11" =>    -- D000 - FFFF
+          
+			 when "01" | "10" | "11" =>    -- D000 - FFFF
             ROM_SELECT <= '1';
           when others =>
             null;
@@ -285,6 +291,8 @@ begin
     end case;        
   end process address_decoder;
 
+  -- ====================== AUX ================================================================
+  
   aux_ctrl: process(A, we, RAMRD, RAMWRT, STORE80, HIRES_MODE, PAGE2, ALTZP, ram_card_sel)
   begin
     aux <= '0';
@@ -300,6 +308,11 @@ begin
         aux <= ( RAMRD and not we ) or ( RAMWRT and we);
     end if;
   end process aux_ctrl;
+  
+  mem_prefix <= C073 when aux = '1' else x"00";	-- RAMWORKS bank register
+  
+
+-- ====================== END AUX ==============================================================
 
   speaker_ctrl: process (CLK_14M)
   begin
@@ -348,7 +361,10 @@ begin
   end process hram_ctrl;
 
   Dxxx <= '1' when A(15 downto 12) = x"D" else '0';
-  CPU_RAM_ADDR <= card_addr when ram_card_sel = '1' else "00" & A(15 downto 13) & (A(12) and not (HRAM_BANK1 and Dxxx)) & A(11 downto 0);
+  
+  CPU_RAM_ADDR <= card_addr when ram_card_sel = '1' else 
+						mem_prefix & A(15 downto 13) & (A(12) and not (HRAM_BANK1 and Dxxx)) & A(11 downto 0);
+  
   HRAM_READ_EN <= HRAM_READ and A(15) and A(14) and (A(13) or A(12)); -- Dxxx-Fxxx
   HRAM_WRITE_EN <= not HRAM_WR_N and A(15) and A(14) and (A(13) or A(12)); -- Dxxx-Fxxx
 
@@ -364,13 +380,18 @@ begin
       C8ROM <= '0';
       COL80 <= '0';
       ALTCHAR <= '0';
+		
     elsif rising_edge(CLK_14M) then
-      READ_KEY <= '0';
       if A(15 downto 8) = x"C3" and C3ROM = '0' then
         C8ROM <= '1';
       elsif A = x"CFFF" then
         C8ROM <= '0';
       end if;
+		
+		if A(15 downto 0) = x"C073" and we = '1' then			-- C073 == RAMWORKS BANK Register
+			C073 <= D_OUT;
+		end if;
+
       if CPU_EN_POST = '1' and KEYBOARD_SELECT = '1' and we = '1' then
         case A(3 downto 1) is
         when "000" => STORE80 <= A(0);
@@ -383,11 +404,9 @@ begin
         when "111" => ALTCHAR <= A(0);
         when others => null;
         end case;
-      elsif C01X_SELECT = '1' and we = '0' then
+      elsif READ_KEY = '1' and we = '0' then
         case A(3 downto 0) is
-        when x"0" =>
-          SF_D <= AKD;
-          READ_KEY <= '1';
+        when x"0" => SF_D <= AKD;
         when x"1" => SF_D <= not HRAM_BANK1;
         when x"2" => SF_D <= HRAM_READ;
         when x"3" => SF_D <= RAMRD;
@@ -405,24 +424,19 @@ begin
         when x"F" => SF_D <= COL80;
         when others => null;
         end case;
-      elsif C01X_SELECT = '1' and we = '1' then
-        READ_KEY <= '1';
       end if;
     end if;
   end process softswitches_IIe;
 
   speaker <= speaker_sig;
 
-  D_IN <= CPU_DL when RAM_SELECT = '1' or HRAM_READ_EN = '1' or ram_card_read = '1' else  -- RAM
-          K when KEYBOARD_SELECT = '1' else  -- Keyboard
-          SF_D & K(6 downto 0) when C01X_SELECT = '1' else -- ][e softswitches
-          GAMEPORT(TO_INTEGER(A(2 downto 0))) & VIDEO_DL(6 downto 0)  -- Gameport
-             when GAMEPORT_SELECT = '1' else
-          rom_out when ROM_SELECT = '1' else  -- ROMs
-          VIDEO_DL when TAPE_OUT = '1' or SPEAKER_SELECT = '1' or STB = '1' or
-                        SOFTSWITCH_SELECT = '1' or PDL_STROBE = '1' or
-                        HRAM_CONTROL = '1' or A = x"CFFF" else  -- Floating bus
-          PD;                           -- Peripherals
+  D_IN <= CPU_DL when RAM_SELECT = '1' or HRAM_READ_EN = '1' or ram_card_read = '1' else  				-- RAM
+          K when KEYBOARD_SELECT = '1' else  																			-- Keyboard
+          SF_D & K(6 downto 0) when READ_KEY = '1' else 																-- ][e softswitches
+          GAMEPORT(TO_INTEGER(A(2 downto 0))) & VIDEO_DL(6 downto 0) when GAMEPORT_SELECT = '1' else 	-- Gameport
+          rom_out when ROM_SELECT = '1' else  																			-- ROMs
+          VIDEO_DL when TAPE_OUT = '1' or SPEAKER_SELECT = '1' or STB = '1' or SOFTSWITCH_SELECT = '1' or PDL_STROBE = '1' or HRAM_CONTROL = '1' or A = x"CFFF" else -- Floating bus 	
+          PD;                           																					-- Peripherals
 
   timing : entity work.timing_generator port map (
     CLK_14M        => CLK_14M,

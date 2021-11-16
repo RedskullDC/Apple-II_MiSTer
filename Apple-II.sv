@@ -228,6 +228,7 @@ parameter CONF_STR = {
 /////////////////  CLOCKS  ////////////////////////
 
 wire clk_sys;
+wire clk_mem;
 wire pll_locked;
 
 pll pll
@@ -236,15 +237,10 @@ pll pll
 	.rst(0),
 	.outclk_0(CLK_VIDEO),	// 57.27272
 	.outclk_1(clk_sys),		// 14.31818
+	.outclk_2(clk_mem),		// 140
+	.outclk_3(SDRAM_CLK),	// 140 2degress behind
 	.locked(pll_locked)
 );
-
-reg cep;
-always @(posedge CLK_VIDEO) begin
-	reg [2:0] div;
-	div <= div + 1'd1;
-	cep   <= (div == 0);
-end
 
 /////////////////  HPS  ///////////////////////////
 
@@ -377,6 +373,7 @@ apple2_top apple2_top
 	.ram_di(ram_din),
 	.ram_we(ram_we),
 	.ram_aux(ram_aux),
+	.RAS(RAS),
 
 	.DISK_ACT(led)
 );
@@ -402,8 +399,10 @@ video_mixer #(.LINE_LENGTH(580), .GAMMA(1)) video_mixer
 
 
 
-wire [17:0] ram_addr;  // sd = 24:0
+//wire [17:0] ram_addr;  // sd = 24:0
+wire [23:0] ram_addr;
 reg  [15:0] ram_dout;
+reg  [15:0] ram_data_out;
 wire  [7:0]	ram_din;
 wire        ram_we;
 wire        ram_aux;
@@ -431,12 +430,37 @@ end
 */
 
 
+
 //assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
 assign SDRAM_CKE = 1;
 
+always @(posedge clk_sys) begin
+	if(ram_we & ram_aux) begin
+		ram_dout[15:8] <= ram_din;
+	end else begin
+		ram_dout[15:8] <= ram_data_out[15:8];	// aux memory + Ramworks 16MB
+	end
+
+	if(ram_we & ~ram_aux) begin
+		ram_dout[7:0]  <= ram_din;
+	end else begin
+		ram_dout[7:0]  <= ram_data_out[7:0];	// main memory + Saturn Card
+	end
+end
+
+reg old_ras,RAS;
+wire ram_trg;
+
+	// SDRAM access trigger
+  assign ram_trg = RAS & (~old_ras);
+
+  always @(posedge clk_sys) begin
+		old_ras <= RAS;
+  end
+  
 sdram sdram
 (
-	// system interface
+/*	// system interface
 	.init    ( !pll_locked ),
 	.clk     ( CLK_VIDEO   ),
 	.sync    ( cep         ),
@@ -452,13 +476,35 @@ sdram sdram
 	.sd_cas  ( SDRAM_nCAS  ),
 
 	// cpu/chipset interface
-	// map rom to sdram word address $200000 - $20ffff
 	.din     ( {ram_din,ram_din}),
-	.addr    ( {7'd0000000,ram_addr}  ),
+	.addr    ( {1'd0,ram_addr}  ),			// 23:0 from Apple, 24:0 == SDRAM
 	.ds      ( {ram_aux,~ram_aux} ),
-	.we      ( ram_we    ),
-	.oe      ( ~ram_we    ),
-	.dout    ( ram_dout   )
+	.we      ( ram_we      ),
+	.oe      ( ram_rd      ),
+	.dout    ( ram_data_out)
+*/	
+	
+	.CLK				(clk_mem ),
+	.nRESET			( ~RESET	),
+	.address			({1'd0,ram_addr}),						// 23:0 from Apple, 24:0 == SDRAM
+	.readdata		( ram_data_out),
+	.writedata 		( {ram_din,ram_din}),
+	.ram_we			(ram_we),
+	.trigger			(ram_trg),
+	.data_strobe	({ram_aux,~ram_aux}),
+	
+	// SDRAM Drive Signals
+	
+	//.SDR_CLK			( SDRAM_CLK ),
+	.nSDR_CS			( SDRAM_nCS ),
+	.nSDR_RAS		( SDRAM_nRAS),
+	.nSDR_CAS		( SDRAM_nCAS),
+	.nSDR_WE			(SDRAM_nWE ),
+	.SDR_DQM			( {SDRAM_DQMH, SDRAM_DQML}),
+	.SDR_BA			(SDRAM_BA),
+	.SDR_ADR			(SDRAM_A),
+	.SDR_DAT			(SDRAM_DQ) 	
+	
 );
 
 //==========================================================================

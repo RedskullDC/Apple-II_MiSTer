@@ -6,7 +6,7 @@ module ramcard
 	input         clk,
 	input         reset_in,
 	input  [15:0] addr,
-	output [17:0] ram_addr,
+	output [23:0] ram_addr,
 	output        card_ram_we,
 	output        card_ram_rd
 );
@@ -45,7 +45,7 @@ end
 
 assign Dxxx = (addr[15:12] == 4'b1101);
 assign DEF  = ((addr[15:14] == 2'b11) & (addr[13:12] != 2'b00));
-assign ram_addr = {bank16k[2], ~bank16k[2], bank16k[1:0], addr[13], addr[12] & ~(bankB & Dxxx), addr[11:0]};
+assign ram_addr = {6'b000000, bank16k[2], ~bank16k[2], bank16k[1:0], addr[13], addr[12] & ~(bankB & Dxxx), addr[11:0]};
 assign card_ram_we = sat_write_en & DEF;
 assign card_ram_rd = sat_read_en  & DEF;
 
