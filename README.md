@@ -23,6 +23,7 @@ Port for the MiST: http://ws0.org/tag/apple2/
 * Ramworks card with 16MB (256 banks of 64KB : see the resources folder for manual/util disk)
 * Mockingboard model A (two AY-3-8913 chips for six audio channels) in slot 4
 * Hooked Left and Right ALT to the Open/Closed Apple Keys respectively.
+* Replaced Pound Sign with '#'  (Temp fix for now)
 
 ## Disk format notes
 
